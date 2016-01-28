@@ -1,0 +1,93 @@
+
+
+---
+title: "Can You Predict Weight Lifting Mistakes from Accelerometer Data?"
+author: "by Scott Semel"
+date: "January 28, 2015"
+output: word_document
+---
+
+
+  
+## Executive Summary
+
+#### Six young health participants were asked to perform one set of 10 repetitions of the Unilateral Dumbbell Biceps Curl in five different fashions: exactly according to the specification (Class A), throwing the elbows to the front (Class B), lifting the dumbbell only halfway (Class C), lowering the dumbbell only halfway (Class D) and throwing the hips to the front (Class E). Class A corresponds to the specified execution of the exercise, while the other 4 classes correspond to common mistakes. We trained and tested several classifiers to find out that accurate prediction of the Class type was possible depending on the method with between 70 and 97% accuracy.
+
+##### Read more: http://groupware.les.inf.puc-rio.br/har#weight_lifting_exercises#ixzz3yZxNTUIP
+
+
+## Data Processing
+```{r}
+load("workspace2016-01-26")
+#  The Weightlifting data set as 19622 records with 160 columns.
+library(AppliedPredictiveModeling)
+library(caret)
+dat = read.csv("pml-training.csv")
+test = read.csv("pml-testing.csv")
+# Several columns in the test set has only NA or mostly NA so we removed those.
+test2 = test[ , ! apply( test , 2 , function(x) any(is.na(x)) ) ]
+# And we realized it was only necessary to train on those columns in the test set. There were more columns in the training set that would never get used anyway.
+keepvar = names(test2)
+keepvar = keepvar[-60]
+keepvar = c(keepvar,"classe")
+# It was important to also remove the first 8 columns from the training and test set because there were counters and timestamps that we did not want to affect the outcome. Leaving those in confused the classifiers which thought they were doing better than they were.
+keepvar = keepvar[8:60]
+dat2 = dat[, keepvar]
+# We trained on 75% and tested on the other 25%. It did not appear to matter where the seed started and still got very close solutions.
+inTrain = createDataPartition(y=dat2$classe, p = .75, list=FALSE)
+training = dat2[ inTrain,]
+testing = dat2[-inTrain,]
+# The linear discriminant analysis did not work as well only producting 70% accurcay
+# modFit1 = train(classe~ .,data=training, method="lda")
+pred = predict(modFit1,testing)
+#confusionMatrix(pred, testing$classe)
+predict(modFit1,test)
+# We tried it with and without cross-validation and it only increased accuracy slightly. Also performing the centering and standardizing between 0 and 1 did not make a difference in the prediction so we didn't continue to do that. 
+tc = trainControl("repeatedcv", 
+                    number=10, 
+                    repeats=10, 
+                    classProbs=TRUE, 
+                    savePred=T)
+# modFit2 = train(classe~ .,data=training, method="lda",trControl=tc, 
+#                 preProc=c("center", "scale"))
+pred = predict(modFit2,testing)
+#table(pred, testing$classe)
+#confusionMatrix(pred, testing$classe)
+predict(modFit2,test)
+# The boosted trees method worked with high accuracy around 97%
+# modFit3 = train(classe~ .,data=training, method="gbm")
+# It was helpful to see the importance of each variable. At first we tried very small subsets of important variables. Then we realized we could test all of them. It is interesting that it has different lists of importance each time so we couldnt just use this function to tell us which variables to use.
+gbmImp = varImp(modFit3, scale = FALSE)
+pred = predict(modFit3,testing)
+confusionMatrix(pred, testing$classe)
+predict(modFit3,test)
+# The rpart method did only produced around 65% accuracy for some reason.
+# modFit4 = train(classe~ .,data=training, method="rpart",)
+pred = predict(modFit4,testing)
+#confusionMatrix(pred, testing$classe)
+predict(modFit4,test)
+# The random forest method worked the best with possibly more than 97% accuracy.
+# modFit5 = train(classe~ .,data=training, method="rf")
+pred = predict(modFit5,testing)
+confusionMatrix(pred, testing$classe)
+predict(modFit5,test)
+# The next step would be to combine all the models and either average the answers or vote with them. But in this case random forests scored 100% on the 20 question validation set so it was not necessary.
+```
+
+
+
+## Results
+#### A relationship was found between the class and the predictor variables. 
+
+#### We successfully reduced the number of useful variables to these:
+```{r}
+gbmImp 
+```
+
+#### Even from this small data set the work appears promising.
+Velloso, E.; Bulling, A.; Gellersen, H.; Ugulino, W.; Fuks, H. Qualitative Activity Recognition of Weight Lifting Exercises. Proceedings of 4th International Conference in Cooperation with SIGCHI (Augmented Human '13) . Stuttgart, Germany: ACM SIGCHI, 2013.
+
+Read more: http://groupware.les.inf.puc-rio.br/har#weight_lifting_exercises#ixzz3yZx0m9BL
+
+
+
